@@ -254,9 +254,6 @@ rl_assignment/
 ├── bonus_challenges.py      # Bonus challenges (optional)
 ├── evaluate_submission.py   # Grading script
 ├── Screenshot.png           # Visual preview of the environment
-└── .solutions/              # Reference solutions (hidden)
-    ├── monte_carlo.py
-    └── td_learning.py
 ```
 
 ## Submission
