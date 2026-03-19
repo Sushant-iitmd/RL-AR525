@@ -131,13 +131,18 @@ def run_sarsa(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GAMMA, alph
     """
     q_table = initialize_q_table()
     episode_rewards = []
-    
+    best_q_table = q_table.copy()
+    best_eval_reward = -np.inf
+
     for episode in range(num_episodes):
+        # Start at 0.5 to reliably escape the action-0 local minimum, decay to 0.01
+        eps = max(0.01, 0.5 * (1.0 - episode / num_episodes))
+
         state, _ = env.reset()
         state = discretize_state(extract_position(state))
 
         # Choose initial action using epsilon-greedy
-        action = choose_action(q_table, state, epsilon)
+        action = choose_action(q_table, state, eps)
 
         total_reward = 0
 
@@ -147,28 +152,33 @@ def run_sarsa(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GAMMA, alph
             next_state = discretize_state(extract_position(next_obs))
 
             # Choose next action using epsilon-greedy (SARSA)
-            next_action = choose_action(q_table, next_state, epsilon)
-            
+            next_action = choose_action(q_table, next_state, eps)
+
             # SARSA update
             td_target = reward + gamma * q_table[next_state][next_action]
             td_error = td_target - q_table[state][action]
             q_table[state][action] += alpha * td_error
-            
+
             # Move to next state and action
             state = next_state
             action = next_action
             total_reward += reward
-            
+
             if terminated or truncated:
                 break
-        
+
         episode_rewards.append(total_reward)
-        
+
         if (episode + 1) % 50 == 0:
             avg_reward = np.mean(episode_rewards[-50:])
             print(f"SARSA Episode {episode + 1}/{num_episodes}, Avg Reward: {avg_reward:.2f}")
-    
-    return q_table, episode_rewards
+            # Save the best Q-table seen so far
+            mean_r, _ = evaluate_policy(env, q_table, num_episodes=3)
+            if mean_r > best_eval_reward:
+                best_eval_reward = mean_r
+                best_q_table = q_table.copy()
+
+    return best_q_table, episode_rewards
 
 def run_double_q_learning(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GAMMA, alpha=ALPHA):
     """
@@ -183,21 +193,30 @@ def run_double_q_learning(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma
     q1 = initialize_q_table()
     q2 = initialize_q_table()
     episode_rewards = []
-    
+    best_q1 = q1.copy()
+    best_q2 = q2.copy()
+    best_eval_reward = -np.inf
+
     for episode in range(num_episodes):
+        # Start at 0.8 exploration, decay to 0.01 so early episodes explore all actions
+        eps = max(0.01, 0.8 * (1.0 - episode / num_episodes))
+
         state, _ = env.reset()
         state = discretize_state(extract_position(state))
 
         total_reward = 0
 
         for step in range(MAX_STEPS):
-            # Choose action using average of Q1 and Q2
-            action = np.argmax(q1[state] + q2[state])
+            # Epsilon-greedy on average of Q1 and Q2
+            if np.random.random() < eps:
+                action = np.random.randint(get_action_space_size())
+            else:
+                action = np.argmax(q1[state] + q2[state])
 
             # Take action
             next_obs, reward, terminated, truncated, _ = env.step(format_action(action))
             next_state = discretize_state(extract_position(next_obs))
-            
+
             # Randomly choose which Q-table to update
             if np.random.random() < 0.5:
                 # Update Q1 using max of Q2
@@ -209,20 +228,27 @@ def run_double_q_learning(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma
                 best_action_next = np.argmax(q1[next_state])
                 td_target = reward + gamma * q1[next_state][best_action_next]
                 q2[state][action] += alpha * (td_target - q2[state][action])
-            
+
             state = next_state
             total_reward += reward
-            
+
             if terminated or truncated:
                 break
-        
+
         episode_rewards.append(total_reward)
-        
+
         if (episode + 1) % 50 == 0:
             avg_reward = np.mean(episode_rewards[-50:])
             print(f"Double Q-Learning Episode {episode + 1}/{num_episodes}, Avg Reward: {avg_reward:.2f}")
+            # Save the best Q-tables seen so far
+            q_combined = (q1 + q2) / 2
+            mean_r, _ = evaluate_policy(env, q_combined, num_episodes=3)
+            if mean_r > best_eval_reward:
+                best_eval_reward = mean_r
+                best_q1 = q1.copy()
+                best_q2 = q2.copy()
     
-    return q1, q2, episode_rewards
+    return best_q1, best_q2, episode_rewards
 
 class ReplayBuffer:
     """
@@ -263,6 +289,9 @@ def run_td_with_replay(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GA
     episode_rewards = []
     
     for episode in range(num_episodes):
+        # Decay epsilon: start at epsilon, finish at 0.01
+        eps = max(0.01, epsilon * (1.0 - episode / num_episodes))
+
         state, _ = env.reset()
         state = discretize_state(extract_position(state))
 
@@ -270,7 +299,7 @@ def run_td_with_replay(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GA
 
         for step in range(MAX_STEPS):
             # Choose action using epsilon-greedy
-            action = choose_action(q_table, state, epsilon)
+            action = choose_action(q_table, state, eps)
 
             # Take action
             next_obs, reward, terminated, truncated, _ = env.step(format_action(action))

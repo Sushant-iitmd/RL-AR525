@@ -21,14 +21,14 @@ from gym_pybullet_drones.utils.enums import ObservationType, ActionType
 # ========================================
 # CONFIGURATION (Students can modify)
 # ========================================
-NUM_BINS = 10
+NUM_BINS = 8           # reduced from 10 → faster convergence, fewer states to explore
 STATE_DIM = 3
 NUM_EPISODES = 500
 MAX_STEPS = 240
 
 EPSILON = 0.1
 GAMMA = 0.99
-ALPHA = 0.1
+ALPHA = 0.2           # increased from 0.1 → faster learning
 
 # ========================================
 # HELPER FUNCTIONS (Do not modify)
@@ -138,8 +138,11 @@ def run_monte_carlo(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GAMMA
         state = discretize_state(extract_position(state))
         total_reward = 0.0
 
+        # Epsilon decay: start at epsilon, end at 0.01
+        epsilon_decay = max(0.01, epsilon * (1 - episode / num_episodes))
+
         for _ in range(MAX_STEPS):
-            action = choose_action(q_table, state, epsilon)
+            action = choose_action(q_table, state, epsilon_decay)
             next_obs, reward, terminated, truncated, _ = env.step(format_action(action))
             next_state = discretize_state(extract_position(next_obs))
 
@@ -190,9 +193,12 @@ def run_q_learning(env, num_episodes=NUM_EPISODES, epsilon=EPSILON, gamma=GAMMA,
         state = discretize_state(extract_position(state))
         total_reward = 0.0
 
+        # Epsilon decay: start at epsilon, end at 0.01
+        epsilon_decay = max(0.01, epsilon * (1 - episode / num_episodes))
+
         for _ in range(MAX_STEPS):
             # Choose action epsilon-greedy
-            action = choose_action(q_table, state, epsilon)
+            action = choose_action(q_table, state, epsilon_decay)
 
             # Step environment
             next_obs, reward, terminated, truncated, _ = env.step(format_action(action))
